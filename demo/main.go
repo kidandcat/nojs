@@ -16,6 +16,7 @@ import (
 type Message struct {
 	ID        string
 	Username  string
+	UserHash  string
 	Text      string
 	Timestamp time.Time
 	Color     string
@@ -27,6 +28,9 @@ var (
 	colors   = []string{"#FF6B6B", "#4ECDC4", "#45B7D1", "#F7B731", "#5F27CD", "#00D2D3", "#FF9FF3", "#54A0FF"}
 	colorMap = make(map[string]string)
 	colorMu  sync.Mutex
+	// User hashes for Discord-like identification
+	userHashes = make(map[string]string)
+	hashMu     sync.Mutex
 	// Channels to notify streaming clients about new messages
 	streamClients = make(map[chan Message]bool)
 	streamMu      sync.Mutex
@@ -43,6 +47,21 @@ func getUserColor(username string) string {
 	color := colors[len(colorMap)%len(colors)]
 	colorMap[username] = color
 	return color
+}
+
+func getUserHash(username string) string {
+	hashMu.Lock()
+	defer hashMu.Unlock()
+	
+	// Use username + cookie value as key for consistent hash per session
+	if hash, exists := userHashes[username]; exists {
+		return hash
+	}
+	
+	// Generate a random 4-digit hash
+	hash := fmt.Sprintf("%04d", time.Now().UnixNano()%10000)
+	userHashes[username] = hash
+	return hash
 }
 
 func broadcastMessage(msg Message) {
@@ -175,11 +194,22 @@ func messagesStreamHandler(ctx *nojs.Context) error {
 			".message-header": {
 				"display": "flex",
 				"justify-content": "space-between",
+				"align-items": "center",
 				"margin-bottom": "8px",
+			},
+			".username-wrapper": {
+				"display": "flex",
+				"align-items": "baseline",
+				"gap": "6px",
 			},
 			".username": {
 				"font-weight": "600",
 				"font-size": "1.1em",
+			},
+			".user-hash": {
+				"color": "#6a6d72",
+				"font-size": "0.9em",
+				"font-weight": "400",
 			},
 			".timestamp": {
 				"font-size": "0.85em",
@@ -277,11 +307,22 @@ func messagesStaticHandler(ctx *nojs.Context) error {
 				.message-header {
 					display: flex;
 					justify-content: space-between;
+					align-items: center;
 					margin-bottom: 8px;
+				}
+				.username-wrapper {
+					display: flex;
+					align-items: baseline;
+					gap: 6px;
 				}
 				.username {
 					font-weight: 600;
 					font-size: 1.1em;
+				}
+				.user-hash {
+					color: #6a6d72;
+					font-size: 0.9em;
+					font-weight: 400;
 				}
 				.timestamp {
 					font-size: 0.85em;
@@ -303,7 +344,10 @@ func renderMessage(msg Message) g.Node {
 	return h.Div(
 		h.Class("message"),
 		h.Div(h.Class("message-header"),
-			h.Span(h.Class("username"), h.Style("color: "+msg.Color), g.Text(msg.Username)),
+			h.Span(h.Class("username-wrapper"),
+				h.Span(h.Class("username"), h.Style("color: "+msg.Color), g.Text(msg.Username)),
+				h.Span(h.Class("user-hash"), g.Text("#"+msg.UserHash)),
+			),
 			h.Span(h.Class("timestamp"), g.Text(msg.Timestamp.Format("15:04:05"))),
 		),
 		h.Div(h.Class("message-text"), g.Text(msg.Text)),
@@ -323,6 +367,23 @@ func sendMessageHandler(ctx *nojs.Context) error {
 		return ctx.Redirect(http.StatusSeeOther, "/")
 	}
 	
+	// Get or create user session ID from cookie
+	sessionID := ""
+	if cookie, err := ctx.Request.Cookie("chat_session"); err == nil {
+		sessionID = cookie.Value
+	} else {
+		// Create new session ID
+		sessionID = strconv.FormatInt(time.Now().UnixNano(), 36)
+		http.SetCookie(ctx.ResponseWriter, &http.Cookie{
+			Name:     "chat_session",
+			Value:    sessionID,
+			Path:     "/",
+			MaxAge:   30 * 24 * 60 * 60,
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+	
 	// Set username cookie
 	http.SetCookie(ctx.ResponseWriter, &http.Cookie{
 		Name:     "chat_username",
@@ -333,14 +394,19 @@ func sendMessageHandler(ctx *nojs.Context) error {
 		SameSite: http.SameSiteLaxMode,
 	})
 	
+	// Get user hash (unique per username+session combination)
+	userKey := username + ":" + sessionID
+	userHash := getUserHash(userKey)
+	
 	// Add message
 	mu.Lock()
 	msg := Message{
 		ID:        strconv.FormatInt(time.Now().UnixNano(), 10),
 		Username:  username,
+		UserHash:  userHash,
 		Text:      text,
 		Timestamp: time.Now(),
-		Color:     getUserColor(username),
+		Color:     getUserColor(userKey),
 	}
 	messages = append(messages, msg)
 	mu.Unlock()
