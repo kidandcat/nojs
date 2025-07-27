@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -28,8 +27,6 @@ var (
 	colors   = []string{"#FF6B6B", "#4ECDC4", "#45B7D1", "#F7B731", "#5F27CD", "#00D2D3", "#FF9FF3", "#54A0FF"}
 	colorMap = make(map[string]string)
 	colorMu  sync.Mutex
-	sseClients = make(map[chan string]bool)
-	sseMu     sync.Mutex
 )
 
 func getUserColor(username string) string {
@@ -45,49 +42,155 @@ func getUserColor(username string) string {
 	return color
 }
 
-func broadcastMessage(msg Message) {
-	sseMu.Lock()
-	defer sseMu.Unlock()
-	
-	msgHTML := fmt.Sprintf(`
-		<div class="message" id="msg-%s">
-			<div class="message-header">
-				<span class="username" style="color: %s">%s</span>
-				<span class="timestamp">%s</span>
-			</div>
-			<div class="message-text">%s</div>
-		</div>
-	`, msg.ID, msg.Color, msg.Username, msg.Timestamp.Format("15:04:05"), msg.Text)
-	
-	data := fmt.Sprintf("data: %s\n\n", strings.ReplaceAll(msgHTML, "\n", " "))
-	
-	for client := range sseClients {
-		select {
-		case client <- data:
-		default:
-			close(client)
-			delete(sseClients, client)
-		}
-	}
-}
-
 func main() {
 	server := nojs.NewServer()
 	
 	// Serve static files
 	server.Static("/static/", "./static")
 	
-	// Main chat page
-	server.Route("/", chatHandler)
+	// Main chat page with streaming
+	server.Route("/", chatStreamHandler)
 	
 	// Message form handler
 	server.Route("/send", sendMessageHandler)
-	
-	// SSE endpoint
-	server.Route("/events", sseHandler)
 
 	fmt.Println("🚀 Global Chat Demo running on http://localhost:8080")
 	log.Fatal(server.Start(":8080"))
+}
+
+func chatStreamHandler(ctx *nojs.Context) error {
+	// Enable streaming
+	stream, err := ctx.Stream()
+	if err != nil {
+		// Fallback to non-streaming
+		return chatHandler(ctx)
+	}
+
+	// Send initial page structure
+	err = stream.WriteHTML(`<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Global Chat - NoJS Demo</title>
+	<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+	<div class="chat-container">
+		<div class="chat-header">
+			<h1>🌍 Global Chat</h1>
+			<p>Chat with anyone, anywhere!</p>
+		</div>
+		<div class="chat-wrapper">
+			<div id="chat-messages" class="chat-messages">
+`)
+	if err != nil {
+		return err
+	}
+
+	// Send existing messages
+	mu.RLock()
+	for _, msg := range messages {
+		msgHTML := fmt.Sprintf(`
+			<div class="message" id="msg-%s">
+				<div class="message-header">
+					<span class="username" style="color: %s">%s</span>
+					<span class="timestamp">%s</span>
+				</div>
+				<div class="message-text">%s</div>
+			</div>
+		`, msg.ID, msg.Color, msg.Username, msg.Timestamp.Format("15:04:05"), msg.Text)
+		
+		err = stream.WriteHTML(msgHTML)
+		if err != nil {
+			mu.RUnlock()
+			return err
+		}
+	}
+	lastMessageCount := len(messages)
+	mu.RUnlock()
+
+	// End messages div but keep connection open
+	err = stream.WriteHTML(`
+			</div>
+`)
+	if err != nil {
+		return err
+	}
+
+	// Get username from cookie
+	username := ""
+	if cookie, err := ctx.Request.Cookie("chat_username"); err == nil {
+		username = cookie.Value
+	}
+
+	// Send the form
+	formHTML := fmt.Sprintf(`
+			<form id="message-form" class="message-form" action="/send" method="POST">
+				<div class="form-group">
+					<input type="text" name="username" placeholder="Your name" required value="%s" class="username-input">
+					<input type="text" name="text" placeholder="Type a message..." required value="" class="message-input" autofocus>
+					<button type="submit" class="send-button">
+						<span>Send</span>
+						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<line x1="22" y1="2" x2="11" y2="13"></line>
+							<polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+						</svg>
+					</button>
+				</div>
+			</form>
+		</div>
+	</div>
+`, username)
+	
+	err = stream.WriteHTML(formHTML)
+	if err != nil {
+		return err
+	}
+
+	// Now keep the connection open and stream new messages
+	for {
+		select {
+		case <-ctx.Request.Context().Done():
+			// Client disconnected
+			return stream.WriteHTML("</body></html>")
+		default:
+			// Check for new messages
+			mu.RLock()
+			if len(messages) > lastMessageCount {
+				// We have new messages to send
+				for i := lastMessageCount; i < len(messages); i++ {
+					msg := messages[i]
+					
+					// Use CSS absolute positioning to place message above the form
+					msgHTML := fmt.Sprintf(`
+					<div class="message streaming-message" id="msg-%s" style="position: absolute; bottom: %dpx; left: 30px; right: 30px;">
+						<div class="message-header">
+							<span class="username" style="color: %s">%s</span>
+							<span class="timestamp">%s</span>
+						</div>
+						<div class="message-text">%s</div>
+					</div>
+					<style>
+						#chat-messages { padding-bottom: %dpx !important; }
+					</style>
+					`, msg.ID, 100 + (i * 80), msg.Color, msg.Username, 
+					msg.Timestamp.Format("15:04:05"), msg.Text, 100 + ((i+1) * 80))
+					
+					err = stream.WriteHTML(msgHTML)
+					if err != nil {
+						mu.RUnlock()
+						return err
+					}
+				}
+				lastMessageCount = len(messages)
+			}
+			mu.RUnlock()
+			
+			// Small delay to avoid busy waiting
+			stream.Sleep(200 * time.Millisecond)
+		}
+	}
 }
 
 func chatHandler(ctx *nojs.Context) error {
@@ -121,20 +224,6 @@ func chatHandler(ctx *nojs.Context) error {
 				renderMessageForm(username, ""),
 			),
 		),
-		Scripts: []g.Node{
-			g.Raw(`<script>
-				// SSE for real-time updates
-				const eventSource = new EventSource('/events');
-				eventSource.onmessage = function(event) {
-					const chatMessages = document.getElementById('chat-messages');
-					chatMessages.insertAdjacentHTML('beforeend', event.data);
-					chatMessages.scrollTop = chatMessages.scrollHeight;
-				};
-				
-				// Auto-scroll to bottom on page load
-				document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
-			</script>`),
-		},
 	}
 
 	return ctx.HTML(http.StatusOK, page.Render())
@@ -204,8 +293,8 @@ func sendMessageHandler(ctx *nojs.Context) error {
 	text := ctx.Request.FormValue("text")
 	
 	if username == "" || text == "" {
-		// Re-render the page with error
-		return chatHandler(ctx)
+		// Redirect back with error
+		return ctx.Redirect(http.StatusSeeOther, "/")
 	}
 	
 	// Set username cookie (expires in 30 days)
@@ -230,43 +319,6 @@ func sendMessageHandler(ctx *nojs.Context) error {
 	messages = append(messages, msg)
 	mu.Unlock()
 	
-	// Broadcast to SSE clients
-	go broadcastMessage(msg)
-	
 	// Redirect back to chat
 	return ctx.Redirect(http.StatusSeeOther, "/")
-}
-
-func sseHandler(ctx *nojs.Context) error {
-	// Set SSE headers
-	ctx.ResponseWriter.Header().Set("Content-Type", "text/event-stream")
-	ctx.ResponseWriter.Header().Set("Cache-Control", "no-cache")
-	ctx.ResponseWriter.Header().Set("Connection", "keep-alive")
-	
-	// Create client channel
-	client := make(chan string)
-	
-	// Register client
-	sseMu.Lock()
-	sseClients[client] = true
-	sseMu.Unlock()
-	
-	// Remove client on disconnect
-	defer func() {
-		sseMu.Lock()
-		delete(sseClients, client)
-		sseMu.Unlock()
-		close(client)
-	}()
-	
-	// Send events to client
-	for {
-		select {
-		case msg := <-client:
-			fmt.Fprint(ctx.ResponseWriter, msg)
-			ctx.ResponseWriter.(interface{ Flush() }).Flush()
-		case <-ctx.Request.Context().Done():
-			return nil
-		}
-	}
 }
