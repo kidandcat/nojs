@@ -5,6 +5,8 @@ import (
 	"html/template"
 	"strings"
 	"time"
+	
+	g "maragu.dev/gomponents"
 )
 
 // FormatTime formats time in a human-readable way
@@ -149,4 +151,25 @@ func GroupBy[T any, K comparable](slice []T, keyFn func(T) K) map[K][]T {
 		result[key] = append(result[key], v)
 	}
 	return result
+}
+
+// Style creates a style element with CSS content
+func Style(css string) g.Node {
+	return g.Raw("<style>" + css + "</style>")
+}
+
+// Styles creates a style element from a map of CSS rules
+func Styles(rules map[string]map[string]string) g.Node {
+	var css strings.Builder
+	css.WriteString("<style>\n")
+	for selector, properties := range rules {
+		css.WriteString(selector)
+		css.WriteString(" {\n")
+		for prop, value := range properties {
+			css.WriteString(fmt.Sprintf("\t%s: %s;\n", prop, value))
+		}
+		css.WriteString("}\n")
+	}
+	css.WriteString("</style>")
+	return g.Raw(css.String())
 }

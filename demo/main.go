@@ -27,7 +27,7 @@ var (
 	colors   = []string{"#FF6B6B", "#4ECDC4", "#45B7D1", "#F7B731", "#5F27CD", "#00D2D3", "#FF9FF3", "#54A0FF"}
 	colorMap = make(map[string]string)
 	colorMu  sync.Mutex
-	// Channels to notify about new messages to streaming clients
+	// Channels to notify streaming clients about new messages
 	streamClients = make(map[chan Message]bool)
 	streamMu      sync.Mutex
 )
@@ -79,7 +79,6 @@ func main() {
 
 // Main chat page with iframe for messages
 func chatPageHandler(ctx *nojs.Context) error {
-	// Get username from cookie
 	username := ""
 	if cookie, err := ctx.Request.Cookie("chat_username"); err == nil {
 		username = cookie.Value
@@ -94,12 +93,11 @@ func chatPageHandler(ctx *nojs.Context) error {
 				h.P(g.Text("Chat with anyone, anywhere!")),
 			),
 			h.Div(h.Class("chat-wrapper"),
-				// Use iframe for streaming messages
+				// iframe for streaming messages
 				h.IFrame(
 					h.Src("/messages"),
 					h.Class("chat-messages"),
-					h.ID("chat-messages"),
-					h.Style("width: 100%; flex: 1; border: none; display: block;"),
+					h.Style("width: 100%; flex: 1; border: none;"),
 				),
 				// Message form
 				nojs.Form(
@@ -152,115 +150,53 @@ func messagesStreamHandler(ctx *nojs.Context) error {
 	}
 
 	// Start HTML document
-	err = stream.StreamPage("Messages", []string{"/static/style.css"})
+	err = stream.StreamPage("Messages", nil)
 	if err != nil {
 		return err
 	}
 
-	// Add custom styles for iframe content with more specific selectors
+	// Simple styles for messages
 	err = stream.WriteNode(
-		g.Raw(`<style>
-			/* Reset and base styles */
-			* {
-				box-sizing: border-box;
-			}
-			
-			html, body {
-				margin: 0;
-				padding: 0;
-				background: transparent;
-				color: #e4e6eb;
-				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-			}
-			
-			body {
-				padding: 20px;
-				overflow-y: auto;
-			}
-			
-			/* Messages wrapper */
-			.messages-wrapper {
-				display: block !important;
-				width: 100% !important;
-			}
-			
-			/* Message container - force block display */
-			.messages-wrapper > .message,
-			body > div.message,
-			.message {
-				display: block !important;
-				width: calc(100% - 40px) !important;
-				max-width: 100% !important;
-				background: #1e2541 !important;
-				padding: 16px 20px !important;
-				border-radius: 12px !important;
-				margin: 0 0 15px 0 !important;
-				border: 1px solid rgba(255, 255, 255, 0.1) !important;
-				transition: all 0.2s ease !important;
-				clear: both !important;
-				float: none !important;
-				position: relative !important;
-				box-sizing: border-box !important;
-			}
-			
-			.message:hover {
-				background: #252b49 !important;
-				transform: translateX(4px);
-				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-			}
-			
-			.message-header {
-				display: flex !important;
-				justify-content: space-between !important;
-				align-items: center !important;
-				margin-bottom: 8px !important;
-				width: 100% !important;
-			}
-			
-			.username {
-				font-weight: 600 !important;
-				font-size: 1.1em !important;
-				text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
-				display: inline-block !important;
-			}
-			
-			.timestamp {
-				font-size: 0.85em !important;
-				color: #b0b3b8 !important;
-				opacity: 0.7 !important;
-				display: inline-block !important;
-			}
-			
-			.message-text {
-				color: #e4e6eb !important;
-				line-height: 1.5 !important;
-				word-wrap: break-word !important;
-				display: block !important;
-				width: 100% !important;
-			}
-			
-			/* Ensure new messages appear with animation */
-			@keyframes slideIn {
-				from {
-					opacity: 0;
-					transform: translateY(10px);
-				}
-				to {
-					opacity: 1;
-					transform: translateY(0);
-				}
-			}
-			
-			.message {
-				animation: slideIn 0.3s ease-out;
-			}
-		</style>`),
+		nojs.Styles(map[string]map[string]string{
+			"body": {
+				"margin": "0",
+				"padding": "20px",
+				"background": "transparent",
+				"font-family": "system-ui, sans-serif",
+				"color": "#e4e6eb",
+			},
+			".message": {
+				"background": "#1e2541",
+				"padding": "16px 20px",
+				"border-radius": "12px",
+				"margin-bottom": "15px",
+				"border": "1px solid rgba(255, 255, 255, 0.1)",
+			},
+			".message-header": {
+				"display": "flex",
+				"justify-content": "space-between",
+				"margin-bottom": "8px",
+			},
+			".username": {
+				"font-weight": "600",
+				"font-size": "1.1em",
+			},
+			".timestamp": {
+				"font-size": "0.85em",
+				"color": "#b0b3b8",
+				"opacity": "0.7",
+			},
+			".message-text": {
+				"color": "#e4e6eb",
+				"line-height": "1.5",
+			},
+		}),
 	)
 	if err != nil {
 		return err
 	}
 
-	// Create a channel for this client
+	// Create channel for this client
 	msgChan := make(chan Message, 10)
 	streamMu.Lock()
 	streamClients[msgChan] = true
@@ -273,12 +209,6 @@ func messagesStreamHandler(ctx *nojs.Context) error {
 		streamMu.Unlock()
 		close(msgChan)
 	}()
-
-	// Create a wrapper div to contain all messages
-	err = stream.WriteNode(g.Raw(`<div class="messages-wrapper">`))
-	if err != nil {
-		return err
-	}
 
 	// Send existing messages
 	mu.RLock()
@@ -324,70 +254,54 @@ func messagesStaticHandler(ctx *nojs.Context) error {
 		messageNodes = append(messageNodes, renderMessage(msg))
 	}
 
-	page := nojs.Page{
-		Title: "Messages",
-		CSS:   []string{"/static/style.css"},
-		Body: h.Body(
-			g.Raw(`<style>
-				* {
-					box-sizing: border-box;
-				}
-				html, body {
-					margin: 0;
-					padding: 0;
-					background: transparent;
-					color: #e4e6eb;
-					font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-				}
+	// Simple page with messages
+	return ctx.HTML(http.StatusOK, h.HTML(
+		h.Head(
+			h.Meta(h.Charset("utf-8")),
+			h.Title("Messages"),
+			nojs.Style(`
 				body {
+					margin: 0;
 					padding: 20px;
+					background: transparent;
+					font-family: system-ui, sans-serif;
+					color: #e4e6eb;
 				}
 				.message {
-					display: block !important;
-					width: 100% !important;
-					background: #1e2541 !important;
-					padding: 16px 20px !important;
-					border-radius: 12px !important;
-					margin-bottom: 15px !important;
-					border: 1px solid rgba(255, 255, 255, 0.1) !important;
-					clear: both !important;
-					float: none !important;
+					background: #1e2541;
+					padding: 16px 20px;
+					border-radius: 12px;
+					margin-bottom: 15px;
+					border: 1px solid rgba(255, 255, 255, 0.1);
 				}
 				.message-header {
-					display: flex !important;
-					justify-content: space-between !important;
-					align-items: center !important;
-					margin-bottom: 8px !important;
+					display: flex;
+					justify-content: space-between;
+					margin-bottom: 8px;
 				}
 				.username {
-					font-weight: 600 !important;
-					font-size: 1.1em !important;
-					text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+					font-weight: 600;
+					font-size: 1.1em;
 				}
 				.timestamp {
-					font-size: 0.85em !important;
-					color: #b0b3b8 !important;
-					opacity: 0.7 !important;
+					font-size: 0.85em;
+					color: #b0b3b8;
+					opacity: 0.7;
 				}
 				.message-text {
-					color: #e4e6eb !important;
-					line-height: 1.5 !important;
-					word-wrap: break-word !important;
-					display: block !important;
+					color: #e4e6eb;
+					line-height: 1.5;
 				}
-			</style>`),
-			g.Group(messageNodes),
+			`),
 		),
-	}
-
-	return ctx.HTML(http.StatusOK, page.Render())
+		h.Body(messageNodes...),
+	))
 }
 
 // Render a single message
 func renderMessage(msg Message) g.Node {
 	return h.Div(
 		h.Class("message"),
-		h.ID("msg-"+msg.ID),
 		h.Div(h.Class("message-header"),
 			h.Span(h.Class("username"), h.Style("color: "+msg.Color), g.Text(msg.Username)),
 			h.Span(h.Class("timestamp"), g.Text(msg.Timestamp.Format("15:04:05"))),
