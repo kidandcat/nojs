@@ -96,7 +96,7 @@ func main() {
 	log.Fatal(server.Start(":8080"))
 }
 
-// Main chat page with iframe for messages
+// Main chat page with iframe for messages (no streaming needed)
 func chatPageHandler(ctx *nojs.Context) error {
 	username := ""
 	if cookie, err := ctx.Request.Cookie("chat_username"); err == nil {
@@ -157,6 +157,7 @@ func chatPageHandler(ctx *nojs.Context) error {
 		),
 	}
 
+	// Regular static response - no streaming needed
 	return ctx.HTML(http.StatusOK, page.Render())
 }
 
