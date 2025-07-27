@@ -27,6 +27,9 @@ var (
 	colors   = []string{"#FF6B6B", "#4ECDC4", "#45B7D1", "#F7B731", "#5F27CD", "#00D2D3", "#FF9FF3", "#54A0FF"}
 	colorMap = make(map[string]string)
 	colorMu  sync.Mutex
+	// Channels to notify about new messages to streaming clients
+	streamClients = make(map[chan Message]bool)
+	streamMu      sync.Mutex
 )
 
 func getUserColor(username string) string {
@@ -42,207 +45,44 @@ func getUserColor(username string) string {
 	return color
 }
 
+func broadcastMessage(msg Message) {
+	streamMu.Lock()
+	defer streamMu.Unlock()
+	
+	for client := range streamClients {
+		select {
+		case client <- msg:
+		default:
+			// Client not ready, skip
+		}
+	}
+}
+
 func main() {
 	server := nojs.NewServer()
 	
 	// Serve static files
 	server.Static("/static/", "./static")
 	
-	// Main streaming chat page
-	server.Route("/", chatStreamHandler)
+	// Main chat page
+	server.Route("/", chatPageHandler)
 	
-	// Message send handler (returns minimal response)
+	// Streaming messages endpoint (for iframe)
+	server.Route("/messages", messagesStreamHandler)
+	
+	// Message send handler
 	server.Route("/send", sendMessageHandler)
 
 	fmt.Println("🚀 Global Chat Demo running on http://localhost:8080")
 	log.Fatal(server.Start(":8080"))
 }
 
-// Main chat page with HTML streaming
-func chatStreamHandler(ctx *nojs.Context) error {
-	// Check if this is just a form submission response
-	if ctx.Query("sent") == "1" {
-		// Return a minimal page that redirects back to streaming
-		return ctx.HTML(http.StatusOK, h.HTML(
-			h.Head(
-				h.Meta(g.Attr("http-equiv", "refresh"), g.Attr("content", "0;url=/")),
-			),
-			h.Body(g.Text("Message sent...")),
-		))
-	}
-
-	// Enable streaming
-	stream, err := ctx.Stream()
-	if err != nil {
-		return fallbackHandler(ctx)
-	}
-
+// Main chat page with iframe for messages
+func chatPageHandler(ctx *nojs.Context) error {
 	// Get username from cookie
 	username := ""
 	if cookie, err := ctx.Request.Cookie("chat_username"); err == nil {
 		username = cookie.Value
-	}
-
-	// Start streaming the page
-	err = stream.StreamPage("Global Chat - NoJS Demo", []string{"/static/style.css"})
-	if err != nil {
-		return err
-	}
-
-	// Write the main container using gomponents
-	err = stream.WriteNode(
-		h.Div(h.Class("chat-container"),
-			h.Div(h.Class("chat-header"),
-				h.H1(g.Text("🌍 Global Chat")),
-				h.P(g.Text("Chat with anyone, anywhere! (Streaming)")),
-			),
-			h.Div(h.Class("chat-wrapper"),
-				h.Div(h.ID("chat-messages"), h.Class("chat-messages")),
-			),
-		),
-	)
-	if err != nil {
-		return err
-	}
-
-	// Track how many messages we've sent
-	messagesSent := 0
-
-	// Send existing messages
-	mu.RLock()
-	for _, msg := range messages {
-		err = stream.WriteNode(renderStreamingMessage(msg, messagesSent))
-		if err != nil {
-			mu.RUnlock()
-			return err
-		}
-		messagesSent++
-	}
-	initialCount := len(messages)
-	mu.RUnlock()
-
-	// Add the form at the bottom using CSS positioning
-	err = stream.WriteNode(
-		h.Form(
-			h.Class("message-form"),
-			h.Action("/send"),
-			h.Method("POST"),
-			h.Style("position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-secondary);"),
-			h.Div(h.Class("form-group"),
-				h.Input(
-					h.Type("text"),
-					h.Name("username"),
-					h.Placeholder("Your name"),
-					h.Required(),
-					h.Class("username-input"),
-					g.If(username != "", h.Value(username)),
-				),
-				h.Input(
-					h.Type("text"),
-					h.Name("text"),
-					h.Placeholder("Type a message..."),
-					h.Required(),
-					h.Class("message-input"),
-					h.AutoFocus(),
-				),
-				h.Button(
-					h.Type("submit"),
-					h.Class("send-button"),
-					h.Span(g.Text("Send")),
-					g.Raw(`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<line x1="22" y1="2" x2="11" y2="13"></line>
-						<polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-					</svg>`),
-				),
-			),
-		),
-		// Add padding to chat-messages for the form
-		g.Raw(`<style>
-			#chat-messages {
-				padding-bottom: 100px;
-			}
-		</style>`),
-	)
-	if err != nil {
-		return err
-	}
-
-	// Keep streaming new messages
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Request.Context().Done():
-			return stream.EndHTML()
-		case <-ticker.C:
-			// Check for new messages
-			mu.RLock()
-			currentCount := len(messages)
-			if currentCount > initialCount {
-				// Send new messages
-				for i := initialCount; i < currentCount; i++ {
-					err = stream.WriteNode(renderStreamingMessage(messages[i], messagesSent))
-					if err != nil {
-						mu.RUnlock()
-						return err
-					}
-					messagesSent++
-				}
-				initialCount = currentCount
-			}
-			mu.RUnlock()
-		}
-	}
-}
-
-// Render a message with CSS to position it correctly in the stream
-func renderStreamingMessage(msg Message, index int) g.Node {
-	return g.Group([]g.Node{
-		// The message div
-		h.Div(
-			h.Class("message"),
-			h.ID("msg-"+msg.ID),
-			h.Style(fmt.Sprintf("position: absolute; top: %dpx; left: 30px; right: 30px;", 120+(index*80))),
-			h.Div(h.Class("message-header"),
-				h.Span(h.Class("username"), h.Style("color: "+msg.Color), g.Text(msg.Username)),
-				h.Span(h.Class("timestamp"), g.Text(msg.Timestamp.Format("15:04:05"))),
-			),
-			h.Div(h.Class("message-text"), g.Text(msg.Text)),
-		),
-		// Update the height of the messages container
-		g.Raw(fmt.Sprintf(`<style>
-			#chat-messages {
-				min-height: %dpx;
-				position: relative;
-			}
-		</style>`, 200+(index*80))),
-	})
-}
-
-// Fallback handler for non-streaming browsers
-func fallbackHandler(ctx *nojs.Context) error {
-	username := ""
-	if cookie, err := ctx.Request.Cookie("chat_username"); err == nil {
-		username = cookie.Value
-	}
-
-	mu.RLock()
-	messagesCopy := make([]Message, len(messages))
-	copy(messagesCopy, messages)
-	mu.RUnlock()
-
-	messageNodes := []g.Node{}
-	for _, msg := range messagesCopy {
-		messageNodes = append(messageNodes, h.Div(
-			h.Class("message"),
-			h.ID("msg-"+msg.ID),
-			h.Div(h.Class("message-header"),
-				h.Span(h.Class("username"), h.Style("color: "+msg.Color), g.Text(msg.Username)),
-				h.Span(h.Class("timestamp"), g.Text(msg.Timestamp.Format("15:04:05"))),
-			),
-			h.Div(h.Class("message-text"), g.Text(msg.Text)),
-		))
 	}
 
 	page := nojs.Page{
@@ -254,7 +94,14 @@ func fallbackHandler(ctx *nojs.Context) error {
 				h.P(g.Text("Chat with anyone, anywhere!")),
 			),
 			h.Div(h.Class("chat-wrapper"),
-				h.Div(append([]g.Node{h.ID("chat-messages"), h.Class("chat-messages")}, messageNodes...)...),
+				// Use iframe for streaming messages
+				h.IFrame(
+					h.Src("/messages"),
+					h.Class("chat-messages"),
+					h.ID("chat-messages"),
+					h.Style("width: 100%; flex: 1; border: none; display: block;"),
+				),
+				// Message form
 				nojs.Form(
 					nojs.FormConfig{
 						Action: "/send",
@@ -296,6 +143,136 @@ func fallbackHandler(ctx *nojs.Context) error {
 	return ctx.HTML(http.StatusOK, page.Render())
 }
 
+// Stream messages in the iframe
+func messagesStreamHandler(ctx *nojs.Context) error {
+	// Enable streaming
+	stream, err := ctx.Stream()
+	if err != nil {
+		return messagesStaticHandler(ctx)
+	}
+
+	// Start HTML document
+	err = stream.StreamPage("Messages", []string{"/static/style.css"})
+	if err != nil {
+		return err
+	}
+
+	// Add custom styles for iframe content
+	err = stream.WriteNode(
+		g.Raw(`<style>
+			body {
+				margin: 0;
+				padding: 20px;
+				background: transparent;
+				overflow-y: auto;
+			}
+			.message {
+				margin-bottom: 15px;
+			}
+			/* Ensure new messages appear with animation */
+			@keyframes slideIn {
+				from {
+					opacity: 0;
+					transform: translateY(10px);
+				}
+				to {
+					opacity: 1;
+					transform: translateY(0);
+				}
+			}
+			.message {
+				animation: slideIn 0.3s ease-out;
+			}
+		</style>`),
+	)
+	if err != nil {
+		return err
+	}
+
+	// Create a channel for this client
+	msgChan := make(chan Message, 10)
+	streamMu.Lock()
+	streamClients[msgChan] = true
+	streamMu.Unlock()
+
+	// Clean up on disconnect
+	defer func() {
+		streamMu.Lock()
+		delete(streamClients, msgChan)
+		streamMu.Unlock()
+		close(msgChan)
+	}()
+
+	// Send existing messages
+	mu.RLock()
+	for _, msg := range messages {
+		err = stream.WriteNode(renderMessage(msg))
+		if err != nil {
+			mu.RUnlock()
+			return err
+		}
+	}
+	mu.RUnlock()
+
+	// Keep connection open and stream new messages
+	for {
+		select {
+		case <-ctx.Request.Context().Done():
+			return stream.EndHTML()
+		case msg := <-msgChan:
+			// Stream the new message
+			err = stream.WriteNode(renderMessage(msg))
+			if err != nil {
+				return err
+			}
+		case <-time.After(30 * time.Second):
+			// Send keep-alive
+			err = stream.KeepAlive()
+			if err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// Static fallback for non-streaming browsers
+func messagesStaticHandler(ctx *nojs.Context) error {
+	mu.RLock()
+	messagesCopy := make([]Message, len(messages))
+	copy(messagesCopy, messages)
+	mu.RUnlock()
+
+	messageNodes := []g.Node{}
+	for _, msg := range messagesCopy {
+		messageNodes = append(messageNodes, renderMessage(msg))
+	}
+
+	page := nojs.Page{
+		Title: "Messages",
+		CSS:   []string{"/static/style.css"},
+		Body: h.Body(
+			g.Raw(`<style>body { margin: 0; padding: 20px; background: transparent; }</style>`),
+			g.Group(messageNodes),
+		),
+	}
+
+	return ctx.HTML(http.StatusOK, page.Render())
+}
+
+// Render a single message
+func renderMessage(msg Message) g.Node {
+	return h.Div(
+		h.Class("message"),
+		h.ID("msg-"+msg.ID),
+		h.Div(h.Class("message-header"),
+			h.Span(h.Class("username"), h.Style("color: "+msg.Color), g.Text(msg.Username)),
+			h.Span(h.Class("timestamp"), g.Text(msg.Timestamp.Format("15:04:05"))),
+		),
+		h.Div(h.Class("message-text"), g.Text(msg.Text)),
+	)
+}
+
+// Handle message sending
 func sendMessageHandler(ctx *nojs.Context) error {
 	if ctx.Request.Method != "POST" {
 		return ctx.Redirect(http.StatusSeeOther, "/")
@@ -330,6 +307,9 @@ func sendMessageHandler(ctx *nojs.Context) error {
 	messages = append(messages, msg)
 	mu.Unlock()
 	
-	// Redirect back with a flag
-	return ctx.Redirect(http.StatusSeeOther, "/?sent=1")
+	// Broadcast to all streaming clients
+	go broadcastMessage(msg)
+	
+	// Redirect back to chat
+	return ctx.Redirect(http.StatusSeeOther, "/")
 }
