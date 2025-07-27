@@ -165,9 +165,42 @@ func messagesStreamHandler(ctx *nojs.Context) error {
 				padding: 20px;
 				background: transparent;
 				overflow-y: auto;
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 			}
 			.message {
+				display: block;
+				background: var(--message-bg, #1e2541);
+				padding: 16px 20px;
+				border-radius: 12px;
 				margin-bottom: 15px;
+				border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+				transition: all 0.2s ease;
+			}
+			.message:hover {
+				background: var(--message-hover, #252b49);
+				transform: translateX(4px);
+				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+			}
+			.message-header {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				margin-bottom: 8px;
+			}
+			.username {
+				font-weight: 600;
+				font-size: 1.1em;
+				text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+			}
+			.timestamp {
+				font-size: 0.85em;
+				color: var(--text-secondary, #b0b3b8);
+				opacity: 0.7;
+			}
+			.message-text {
+				color: var(--text-primary, #e4e6eb);
+				line-height: 1.5;
+				word-wrap: break-word;
 			}
 			/* Ensure new messages appear with animation */
 			@keyframes slideIn {
@@ -251,7 +284,43 @@ func messagesStaticHandler(ctx *nojs.Context) error {
 		Title: "Messages",
 		CSS:   []string{"/static/style.css"},
 		Body: h.Body(
-			g.Raw(`<style>body { margin: 0; padding: 20px; background: transparent; }</style>`),
+			g.Raw(`<style>
+				body {
+					margin: 0;
+					padding: 20px;
+					background: transparent;
+					font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+				}
+				.message {
+					display: block;
+					background: var(--message-bg, #1e2541);
+					padding: 16px 20px;
+					border-radius: 12px;
+					margin-bottom: 15px;
+					border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+				}
+				.message-header {
+					display: flex;
+					justify-content: space-between;
+					align-items: center;
+					margin-bottom: 8px;
+				}
+				.username {
+					font-weight: 600;
+					font-size: 1.1em;
+					text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+				}
+				.timestamp {
+					font-size: 0.85em;
+					color: var(--text-secondary, #b0b3b8);
+					opacity: 0.7;
+				}
+				.message-text {
+					color: var(--text-primary, #e4e6eb);
+					line-height: 1.5;
+					word-wrap: break-word;
+				}
+			</style>`),
 			g.Group(messageNodes),
 		),
 	}
