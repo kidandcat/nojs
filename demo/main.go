@@ -157,51 +157,88 @@ func messagesStreamHandler(ctx *nojs.Context) error {
 		return err
 	}
 
-	// Add custom styles for iframe content
+	// Add custom styles for iframe content with more specific selectors
 	err = stream.WriteNode(
 		g.Raw(`<style>
-			body {
+			/* Reset and base styles */
+			* {
+				box-sizing: border-box;
+			}
+			
+			html, body {
 				margin: 0;
-				padding: 20px;
+				padding: 0;
 				background: transparent;
-				overflow-y: auto;
+				color: #e4e6eb;
 				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 			}
-			.message {
-				display: block;
-				background: var(--message-bg, #1e2541);
-				padding: 16px 20px;
-				border-radius: 12px;
-				margin-bottom: 15px;
-				border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
-				transition: all 0.2s ease;
+			
+			body {
+				padding: 20px;
+				overflow-y: auto;
 			}
+			
+			/* Messages wrapper */
+			.messages-wrapper {
+				display: block !important;
+				width: 100% !important;
+			}
+			
+			/* Message container - force block display */
+			.messages-wrapper > .message,
+			body > div.message,
+			.message {
+				display: block !important;
+				width: calc(100% - 40px) !important;
+				max-width: 100% !important;
+				background: #1e2541 !important;
+				padding: 16px 20px !important;
+				border-radius: 12px !important;
+				margin: 0 0 15px 0 !important;
+				border: 1px solid rgba(255, 255, 255, 0.1) !important;
+				transition: all 0.2s ease !important;
+				clear: both !important;
+				float: none !important;
+				position: relative !important;
+				box-sizing: border-box !important;
+			}
+			
 			.message:hover {
-				background: var(--message-hover, #252b49);
+				background: #252b49 !important;
 				transform: translateX(4px);
 				box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 			}
+			
 			.message-header {
-				display: flex;
-				justify-content: space-between;
-				align-items: center;
-				margin-bottom: 8px;
+				display: flex !important;
+				justify-content: space-between !important;
+				align-items: center !important;
+				margin-bottom: 8px !important;
+				width: 100% !important;
 			}
+			
 			.username {
-				font-weight: 600;
-				font-size: 1.1em;
-				text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+				font-weight: 600 !important;
+				font-size: 1.1em !important;
+				text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+				display: inline-block !important;
 			}
+			
 			.timestamp {
-				font-size: 0.85em;
-				color: var(--text-secondary, #b0b3b8);
-				opacity: 0.7;
+				font-size: 0.85em !important;
+				color: #b0b3b8 !important;
+				opacity: 0.7 !important;
+				display: inline-block !important;
 			}
+			
 			.message-text {
-				color: var(--text-primary, #e4e6eb);
-				line-height: 1.5;
-				word-wrap: break-word;
+				color: #e4e6eb !important;
+				line-height: 1.5 !important;
+				word-wrap: break-word !important;
+				display: block !important;
+				width: 100% !important;
 			}
+			
 			/* Ensure new messages appear with animation */
 			@keyframes slideIn {
 				from {
@@ -213,6 +250,7 @@ func messagesStreamHandler(ctx *nojs.Context) error {
 					transform: translateY(0);
 				}
 			}
+			
 			.message {
 				animation: slideIn 0.3s ease-out;
 			}
@@ -235,6 +273,12 @@ func messagesStreamHandler(ctx *nojs.Context) error {
 		streamMu.Unlock()
 		close(msgChan)
 	}()
+
+	// Create a wrapper div to contain all messages
+	err = stream.WriteNode(g.Raw(`<div class="messages-wrapper">`))
+	if err != nil {
+		return err
+	}
 
 	// Send existing messages
 	mu.RLock()
@@ -285,40 +329,51 @@ func messagesStaticHandler(ctx *nojs.Context) error {
 		CSS:   []string{"/static/style.css"},
 		Body: h.Body(
 			g.Raw(`<style>
-				body {
+				* {
+					box-sizing: border-box;
+				}
+				html, body {
 					margin: 0;
-					padding: 20px;
+					padding: 0;
 					background: transparent;
+					color: #e4e6eb;
 					font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 				}
+				body {
+					padding: 20px;
+				}
 				.message {
-					display: block;
-					background: var(--message-bg, #1e2541);
-					padding: 16px 20px;
-					border-radius: 12px;
-					margin-bottom: 15px;
-					border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+					display: block !important;
+					width: 100% !important;
+					background: #1e2541 !important;
+					padding: 16px 20px !important;
+					border-radius: 12px !important;
+					margin-bottom: 15px !important;
+					border: 1px solid rgba(255, 255, 255, 0.1) !important;
+					clear: both !important;
+					float: none !important;
 				}
 				.message-header {
-					display: flex;
-					justify-content: space-between;
-					align-items: center;
-					margin-bottom: 8px;
+					display: flex !important;
+					justify-content: space-between !important;
+					align-items: center !important;
+					margin-bottom: 8px !important;
 				}
 				.username {
-					font-weight: 600;
-					font-size: 1.1em;
-					text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+					font-weight: 600 !important;
+					font-size: 1.1em !important;
+					text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
 				}
 				.timestamp {
-					font-size: 0.85em;
-					color: var(--text-secondary, #b0b3b8);
-					opacity: 0.7;
+					font-size: 0.85em !important;
+					color: #b0b3b8 !important;
+					opacity: 0.7 !important;
 				}
 				.message-text {
-					color: var(--text-primary, #e4e6eb);
-					line-height: 1.5;
-					word-wrap: break-word;
+					color: #e4e6eb !important;
+					line-height: 1.5 !important;
+					word-wrap: break-word !important;
+					display: block !important;
 				}
 			</style>`),
 			g.Group(messageNodes),
