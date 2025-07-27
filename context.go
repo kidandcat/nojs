@@ -2,13 +2,13 @@ package nojs
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	g "maragu.dev/gomponents"
+	h "maragu.dev/gomponents/html"
 )
 
 // Context represents the request context
@@ -197,8 +197,13 @@ func (sw *StreamWriter) WriteHTML(html string) error {
 }
 
 // WriteNode writes a gomponents node to the stream
-func (sw *StreamWriter) WriteNode(node g.Node) error {
-	return node.Render(sw)
+func (sw *StreamWriter) WriteNode(nodes ...g.Node) error {
+	for _, node := range nodes {
+		if err := node.Render(sw); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // KeepAlive sends a keep-alive comment to prevent timeout
@@ -206,23 +211,41 @@ func (sw *StreamWriter) KeepAlive() error {
 	return sw.WriteString("<!-- keepalive -->\n")
 }
 
-// StartHTML writes the beginning of an HTML document for streaming
-func (sw *StreamWriter) StartHTML(title string) error {
-	html := fmt.Sprintf(`<!DOCTYPE html>
+// StartHTML writes the beginning of an HTML document for streaming using gomponents
+func (sw *StreamWriter) StartHTML(title string, headNodes ...g.Node) error {
+	// We need to write the opening tags but not close body/html
+	html := `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>%s</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>` + title + `</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">`
+	
+	for _, node := range headNodes {
+		var buf strings.Builder
+		node.Render(&buf)
+		html += buf.String()
+	}
+	
+	html += `
 </head>
 <body>
-`, title)
+`
 	return sw.WriteString(html)
 }
 
 // EndHTML writes the end of an HTML document
 func (sw *StreamWriter) EndHTML() error {
 	return sw.WriteString("</body>\n</html>\n")
+}
+
+// StreamPage starts streaming an HTML page with the given configuration
+func (sw *StreamWriter) StreamPage(title string, css []string) error {
+	headNodes := []g.Node{}
+	for _, cssPath := range css {
+		headNodes = append(headNodes, h.Link(h.Rel("stylesheet"), h.Href(cssPath)))
+	}
+	return sw.StartHTML(title, headNodes...)
 }
 
 // Sleep pauses execution while maintaining the connection
