@@ -96,6 +96,12 @@ func chatHandler(ctx *nojs.Context) error {
 	copy(messagesCopy, messages)
 	mu.RUnlock()
 
+	// Get username from cookie
+	username := ""
+	if cookie, err := ctx.Request.Cookie("chat_username"); err == nil {
+		username = cookie.Value
+	}
+
 	// Create message nodes
 	messageNodes := []g.Node{}
 	for _, msg := range messagesCopy {
@@ -112,7 +118,7 @@ func chatHandler(ctx *nojs.Context) error {
 			),
 			h.Div(h.Class("chat-wrapper"),
 				h.Div(append([]g.Node{h.ID("chat-messages"), h.Class("chat-messages")}, messageNodes...)...),
-				renderMessageForm("", ""),
+				renderMessageForm(username, ""),
 			),
 		),
 		Scripts: []g.Node{
@@ -201,6 +207,16 @@ func sendMessageHandler(ctx *nojs.Context) error {
 		// Re-render the page with error
 		return chatHandler(ctx)
 	}
+	
+	// Set username cookie (expires in 30 days)
+	http.SetCookie(ctx.ResponseWriter, &http.Cookie{
+		Name:     "chat_username",
+		Value:    username,
+		Path:     "/",
+		MaxAge:   30 * 24 * 60 * 60, // 30 days
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
 	
 	// Add message
 	mu.Lock()
