@@ -1,0 +1,375 @@
+/* NoJS Example Styles */
+
+:root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --success: #10b981;
+    --danger: #ef4444;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-600: #4b5563;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    color: var(--gray-900);
+    background-color: var(--gray-50);
+}
+
+.container {
+    max-width: 1024px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+h1, h2, h3 {
+    margin-top: 0;
+    line-height: 1.2;
+}
+
+h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+h2 {
+    font-size: 1.875rem;
+}
+
+a {
+    color: var(--primary);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Grid Layout */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+/* Cards */
+.card {
+    background: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.card-header {
+    padding: 1rem 1.5rem;
+    background-color: var(--gray-100);
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.card-header h3 {
+    margin: 0;
+}
+
+.card-body {
+    padding: 1.5rem;
+}
+
+.card p {
+    margin: 0 0 1rem;
+}
+
+/* Buttons */
+.button, button[type="submit"] {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    font-size: 1rem;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.button:hover, button[type="submit"]:hover {
+    background-color: var(--primary-dark);
+    text-decoration: none;
+}
+
+.button-secondary {
+    background-color: var(--gray-500);
+}
+
+.button-secondary:hover {
+    background-color: var(--gray-600);
+}
+
+.button-danger {
+    background-color: var(--danger);
+}
+
+.button-danger:hover {
+    background-color: #dc2626;
+}
+
+.button-small {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+/* Forms */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--gray-700);
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--gray-300);
+    border-radius: 0.375rem;
+    font-size: 1rem;
+    background-color: white;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.inline-form {
+    display: inline-block;
+    margin-right: 0.5rem;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+/* Alerts */
+.alert {
+    padding: 1rem;
+    border-radius: 0.375rem;
+    margin-bottom: 1rem;
+}
+
+.alert-success {
+    background-color: #d1fae5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+
+.alert-error {
+    background-color: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+
+/* Modal */
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal {
+    background: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    max-width: 500px;
+    width: 90%;
+    max-height: 90vh;
+    overflow: auto;
+}
+
+.modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--gray-200);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    margin: 0;
+}
+
+.modal-header .close {
+    font-size: 1.5rem;
+    color: var(--gray-400);
+    text-decoration: none;
+}
+
+.modal-header .close:hover {
+    color: var(--gray-600);
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+/* Todo List Specific */
+.actions {
+    margin: 2rem 0;
+}
+
+.todo-list {
+    margin-top: 2rem;
+}
+
+.todo-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 0.375rem;
+    margin-bottom: 0.75rem;
+}
+
+.todo-item.completed .todo-content span {
+    text-decoration: line-through;
+    color: var(--gray-500);
+}
+
+.todo-content small {
+    display: block;
+    color: var(--gray-500);
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+.todo-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.empty {
+    text-align: center;
+    color: var(--gray-500);
+    padding: 3rem 0;
+}
+
+/* Streaming Demo */
+.stream-container {
+    margin-top: 2rem;
+}
+
+.stream-item {
+    padding: 1rem;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 0.375rem;
+    margin-bottom: 0.75rem;
+    animation: slideIn 0.3s ease-out;
+}
+
+.stream-item strong {
+    color: var(--primary);
+    margin-right: 1rem;
+}
+
+.stream-item span {
+    color: var(--gray-500);
+    font-size: 0.875rem;
+}
+
+.stream-item p {
+    margin: 0.5rem 0 0;
+}
+
+.stream-complete {
+    text-align: center;
+    color: var(--success);
+    font-weight: 500;
+    padding: 2rem;
+    background: #d1fae5;
+    border-radius: 0.375rem;
+    margin-top: 1rem;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Chat Styles */
+.chat-container {
+    margin-top: 1rem;
+    border: 1px solid var(--gray-200);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    height: 400px;
+}
+
+.chat-messages {
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+
+.chat-form {
+    margin-top: 1rem;
+}
+
+.chat-input-group {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.chat-input {
+    flex: 1;
+}
+
+.change-username {
+    margin-top: 1rem;
+    text-align: center;
+}
+
+.change-username a {
+    color: var(--gray-500);
+    font-size: 0.875rem;
+}
